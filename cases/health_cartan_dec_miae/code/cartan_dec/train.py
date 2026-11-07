@@ -29,6 +29,7 @@ import torch.nn.functional as F
 from torch.utils.data import DataLoader
 
 from .data import collate_backbones, make_dataset
+from .geometry_eval import masked_geometry_metrics
 from .model import CartanDEC, CartanDECConfig
 from .probe import extract_features, train_probe
 from .utils import AverageMeter, CSVLogger, resolve_device, save_checkpoint, save_json, set_seed
@@ -333,7 +334,13 @@ def train(config: TrainConfig) -> dict:
         )
         results["probe"] = metrics
         print(f"probe: {metrics}")
-        save_json(out_dir / "metrics.json", results)
+
+    print("evaluating masked geometry reconstruction...")
+    results["reconstruction"] = masked_geometry_metrics(
+        model, test_loader, device, mask_seed=1234
+    )
+    print(f"reconstruction: {results['reconstruction']}")
+    save_json(out_dir / "metrics.json", results)
 
     return results
 

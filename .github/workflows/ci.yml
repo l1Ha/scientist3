@@ -2,23 +2,79 @@ name: CI
 
 on:
   push:
+    branches: [main]
   pull_request:
+
+permissions:
+  contents: read
 
 jobs:
   test:
+    name: pipeline tests (py${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install package with dev extras
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+      - name: Run test suite
+        run: python -m pytest
+
+  toy-demo:
+    name: full toy pipeline
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: "3.13"
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[toy]"
+      - name: Run the complete pipeline (offline, scripted agents)
+        run: python -m scientist3 run toy_regression --run-id ci-demo
+      - name: Assert the expected outcome
+        run: |
+          python - <<'PY'
+          import json
+          import pathlib
 
-      - name: Install CPU PyTorch
-        run: pip install torch --index-url https://download.pytorch.org/whl/cpu
+          summary = json.loads(pathlib.Path("runs/ci-demo/summary.json").read_text(encoding="utf-8"))
+          assert summary["audit_passed"] is True, summary
+          assert summary["meta_decision"] == "accept", summary
+          assert summary["selected_idea"] == "I5", summary
+          assert summary["evidence"]["ablation_clean"] is True, summary
+          print("toy demo OK:", summary["selected"], "score", summary["review_score"])
+          PY
+      - name: Upload run artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: toy-demo-run
+          path: runs/ci-demo
+          if-no-files-found: error
 
-      - name: Install package
-        run: pip install -e ".[probe,dev]"
-
-      - name: Run tests
-        run: pytest -q
+  health-case-tests:
+    name: cartan-dec unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install CPU torch and case dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install numpy scikit-learn pytest
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+      - name: Run Cartan-DEC unit tests
+        working-directory: cases/health_cartan_dec_miae/code
+        run: python -m pytest tests -q

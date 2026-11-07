@@ -1,13 +1,9 @@
-# Core
-torch>=2.1
-numpy>=1.24
-
-# Frozen-encoder probe and metrics
-scikit-learn>=1.3
-
-# Optional TEDBench data adapters
-datasets>=2.18
-huggingface-hub>=0.20
-
-# Development
-pytest>=7.4
+# Convenience file for editable installs.
+# The package itself has no required dependencies; the toy case needs numpy only.
+#
+#   pip install -e ".[toy]"     # NumPy reference case
+#   pip install -e ".[health]"  # torch + scikit-learn for the Cartan-DEC case
+#   pip install -e ".[dev]"     # test suite
+#
+# This file simply installs the development extras:
+-e .[dev]

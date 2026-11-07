@@ -1,0 +1,179 @@
+protected_paths = [
+  "code/cartan_dec/data.py",
+  "code/cartan_dec/geometry_eval.py",
+  "code/cartan_dec/masking.py",
+  "code/cartan_dec/probe.py",
+  "problem.md",
+]
+
+[case]
+id = "health_cartan_dec_miae"
+title = "Geometry-aware protein self-supervision on synthetic folds"
+domain = "health / structural biology (synthetic smoke benchmark)"
+problem = "problem.md"
+code_dir = "code"
+metrics_file = "metrics.json"
+keywords = ["protein backbone", "discrete differential geometry", "self-supervision", "masked autoencoder"]
+notes = """
+This case is the real Cartan-DEC-MiAE deployment bundled with Scientist3, run at
+a CPU smoke-test scale on the synthetic four-family backbone benchmark. The
+scientific claim is limited to this benchmark and budget: probe accuracy is at
+ceiling, so the primary endpoint is masked geometry reconstruction, which
+directly tests the Cartan transport objective. TEDBench experiments are not run
+here and remain the case's documented next step.
+"""
+
+[baseline]
+name = "vanilla masked backbone autoencoder"
+command = "{python} -m cartan_dec.train --dataset synthetic --samples {samples} --test-samples {test_samples} --epochs {epochs} --d-model 128 --depth 4 --decoder-dim 128 --decoder-depth 2 --min-length 60 --max-synthetic-length 90 --max-exact-heat-residues 96 --probe-epochs 20 --seed {seed} --no-curvature-bias --no-heat-bias --lambda-omega 0 --lambda-curvature 0 --lambda-integration 0 --out {out}"
+
+[[metrics]]
+name = "recon_integrated_rmse"
+direction = "min"
+primary = true
+path = "reconstruction.integrated_position_rmse"
+min_gain = 0.05
+
+[[metrics]]
+name = "recon_position_rmse"
+direction = "min"
+path = "reconstruction.position_rmse"
+
+[[metrics]]
+name = "probe_accuracy"
+direction = "max"
+path = "probe.accuracy"
+
+[budget]
+seeds = [0, 1]
+subset_samples = 96
+full_samples = 160
+test_samples = 64
+subset_epochs = 8
+full_epochs = 15
+top_ideas = 3
+max_screening_rounds = 1
+max_evo_rounds = 1
+min_successful_ideas = 4
+max_successful_ideas = 4
+max_ablation_refinements = 0
+max_review_rounds = 2
+review_threshold = 9.0
+max_meta_refinements = 1
+timeout_seconds = 900
+min_relative_gain = 0.05
+ablation_min_gain = 0.03
+
+[variables]
+external_validity = false
+references = [
+  { title = "Highly accurate protein structure prediction with AlphaFold (Jumper et al., Nature 2021)", doi = "10.1038/s41586-021-03819-2" },
+  { title = "Evolutionary-scale prediction of atomic-level protein structure with a language model (Lin et al., Science 2023)", doi = "10.1126/science.ade2574" },
+  { title = "Geometric deep learning on molecular representations (Atz et al., Nature Machine Intelligence 2021)", doi = "10.1038/s42256-021-00407-2" },
+  { title = "Discrete Differential Geometry: An Applied Introduction (Crane et al., 2013)", url = "https://www.cs.cmu.edu/~kmcrane/Projects/DDG/" },
+  { title = "ScientistTwo: Pioneering the Human Knowledge Frontier with Autonomous AI (arXiv:2609.19644)", url = "https://arxiv.org/abs/2609.19644" },
+]
+
+[[limitations]]
+id = "L1"
+text = "A vanilla masked backbone autoencoder supervises only per-residue coordinate, rotation and local-frame heads, so nothing forces the predicted connection forms to transport consistently along the chain; the observable failure is a large gap between the direct position head and the integrated reconstruction error on held-out chains."
+mechanism = true
+test = "Compare direct-position RMSE with integrated-position RMSE for a model trained with and without the integration objective."
+
+[[limitations]]
+id = "L2"
+text = "The transport objective is one of six equally weighted terms, so the gradient is dominated by local target fitting and the integrated reconstruction endpoint is under-optimized relative to its importance."
+mechanism = true
+test = "Raise the integration and connection-form weights by 4x and compare the primary endpoint against the equal-weight model."
+
+[[limitations]]
+id = "L3"
+text = "Uniform span masking samples masked regions independently of geometric difficulty, so training spends capacity on easy fragments while high-curvature or high-holonomy regions that stress transport are under-represented."
+mechanism = true
+test = "Switch to curvature-defect-guided geometry masking at the same mask ratio and compare held-out reconstruction."
+
+[[limitations]]
+id = "L4"
+text = "All development evidence comes from short synthetic chains of 60-90 residues, so behavior on longer chains and on a different masking distribution is untested."
+mechanism = false
+test = "Run length-extrapolation and random-masking supplementary experiments on the selected model."
+
+[[ideas]]
+id = "I1"
+name = "full Cartan-DEC self-supervision"
+novelty = "medium"
+targets = ["L1"]
+mechanism = "Predict discrete connection forms and curvature from visible residues, then integrate the predicted forms back to 3D and supervise the integrated geometry; use curvature- and heat-kernel attention biases."
+delta = "Adds the non-abelian transport objective and geometry-aware attention to the vanilla masked autoencoder."
+risk = "At smoke-test scale the geometric biases may receive too little signal to matter; the transport losses should still help."
+command = "{python} -m cartan_dec.train --dataset synthetic --samples {samples} --test-samples {test_samples} --epochs {epochs} --d-model 128 --depth 4 --decoder-dim 128 --decoder-depth 2 --min-length 60 --max-synthetic-length 90 --max-exact-heat-residues 96 --probe-epochs 20 --seed {seed} --out {out}"
+
+[[ideas]]
+id = "I2"
+name = "transport-weighted training"
+novelty = "medium"
+targets = ["L2"]
+mechanism = "Keep the full Cartan-DEC architecture but multiply the connection-form and integration losses by four, making transport consistency dominate the local reconstruction terms."
+delta = "Reframes the method as a loss-balance problem: the transport mechanism already exists but is diluted by equal weighting."
+risk = "Over-weighting transport can destabilize local reconstruction; the screening budget must catch a regression."
+command = "{python} -m cartan_dec.train --dataset synthetic --samples {samples} --test-samples {test_samples} --epochs {epochs} --d-model 128 --depth 4 --decoder-dim 128 --decoder-depth 2 --min-length 60 --max-synthetic-length 90 --max-exact-heat-residues 96 --probe-epochs 20 --seed {seed} --lambda-integration 4 --lambda-omega 4 --out {out}"
+
+[[ideas]]
+id = "I3"
+name = "curvature-guided masking"
+novelty = "medium"
+targets = ["L3"]
+mechanism = "Sample masked spans with probability proportional to the per-residue curvature energy, so training concentrates on geometrically difficult fragments."
+delta = "Changes what is masked rather than how the model is built; tests the data-side consequence of the Cartan view."
+risk = "Defect-guided masking can starve the model of easy context and hurt reconstruction."
+command = "{python} -m cartan_dec.train --dataset synthetic --samples {samples} --test-samples {test_samples} --epochs {epochs} --d-model 128 --depth 4 --decoder-dim 128 --decoder-depth 2 --min-length 60 --max-synthetic-length 90 --max-exact-heat-residues 96 --probe-epochs 20 --seed {seed} --mask-strategy geometry --out {out}"
+
+[[evolved_ideas]]
+id = "I4"
+name = "curvature-stabilised transport"
+novelty = "medium"
+targets = ["L1", "L2"]
+mechanism = "Combine 4x transport weighting with a 2x curvature-supervision term to keep the predicted connection forms regular while the transport constraint dominates."
+delta = "Evolved from the transport-weighted idea after observing that curvature supervision is the weakest of the three Cartan terms under the new balance."
+risk = "Additional curvature weight may over-constrain flexible coil regions."
+command = "{python} -m cartan_dec.train --dataset synthetic --samples {samples} --test-samples {test_samples} --epochs {epochs} --d-model 128 --depth 4 --decoder-dim 128 --decoder-depth 2 --min-length 60 --max-synthetic-length 90 --max-exact-heat-residues 96 --probe-epochs 20 --seed {seed} --lambda-integration 4 --lambda-omega 4 --lambda-curvature 2 --out {out}"
+
+[[ablations]]
+id = "A1"
+component = "transport integration loss"
+description = "Remove the integrated-geometry supervision while keeping the predicted connection forms and all other terms."
+command = "{python} -m cartan_dec.train --dataset synthetic --samples {samples} --test-samples {test_samples} --epochs {epochs} --d-model 128 --depth 4 --decoder-dim 128 --decoder-depth 2 --min-length 60 --max-synthetic-length 90 --max-exact-heat-residues 96 --probe-epochs 20 --seed {seed} --lambda-omega 4 --lambda-integration 0 --out {out}"
+direction = "drop"
+
+[[ablations]]
+id = "A2"
+component = "connection-form supervision"
+description = "Remove direct supervision of the per-edge connection forms while keeping the integration objective."
+command = "{python} -m cartan_dec.train --dataset synthetic --samples {samples} --test-samples {test_samples} --epochs {epochs} --d-model 128 --depth 4 --decoder-dim 128 --decoder-depth 2 --min-length 60 --max-synthetic-length 90 --max-exact-heat-residues 96 --probe-epochs 20 --seed {seed} --lambda-integration 4 --lambda-omega 0 --out {out}"
+direction = "drop"
+
+[[ablations]]
+id = "A3"
+component = "curvature supervision"
+description = "Remove the curvature-vector and curvature-energy losses while keeping transport weighting."
+command = "{python} -m cartan_dec.train --dataset synthetic --samples {samples} --test-samples {test_samples} --epochs {epochs} --d-model 128 --depth 4 --decoder-dim 128 --decoder-depth 2 --min-length 60 --max-synthetic-length 90 --max-exact-heat-residues 96 --probe-epochs 20 --seed {seed} --lambda-integration 4 --lambda-omega 4 --lambda-curvature 0 --out {out}"
+direction = "drop"
+
+[[ablations]]
+id = "A4"
+component = "transport loss rebalancing"
+description = "Revert the transport and curvature weights to equal weighting (1/1/1), keeping the selected architecture and all loss terms."
+command = "{python} -m cartan_dec.train --dataset synthetic --samples {samples} --test-samples {test_samples} --epochs {epochs} --d-model 128 --depth 4 --decoder-dim 128 --decoder-depth 2 --min-length 60 --max-synthetic-length 90 --max-exact-heat-residues 96 --probe-epochs 20 --seed {seed} --lambda-integration 1 --lambda-omega 1 --lambda-curvature 1 --out {out}"
+direction = "drop"
+
+[[supplementary]]
+id = "R1"
+question = "Does the selected transport-weighted model extrapolate to longer chains?"
+description = "Retrain and evaluate on chains of 80-140 residues instead of the development range of 60-90."
+command = "{python} -m cartan_dec.train --dataset synthetic --samples {samples} --test-samples {test_samples} --epochs {epochs} --d-model 128 --depth 4 --decoder-dim 128 --decoder-depth 2 --min-length 80 --max-synthetic-length 140 --max-exact-heat-residues 96 --probe-epochs 20 --seed {seed} --lambda-integration 4 --lambda-omega 4 --out {out}"
+
+[[supplementary]]
+id = "R2"
+question = "Is the gain specific to span masking, or does it survive a random-mask distribution?"
+description = "Evaluate the selected model with random masking at the same mask ratio."
+command = "{python} -m cartan_dec.train --dataset synthetic --samples {samples} --test-samples {test_samples} --epochs {epochs} --d-model 128 --depth 4 --decoder-dim 128 --decoder-depth 2 --min-length 60 --max-synthetic-length 90 --max-exact-heat-residues 96 --probe-epochs 20 --seed {seed} --lambda-integration 4 --lambda-omega 4 --mask-strategy random --out {out}"

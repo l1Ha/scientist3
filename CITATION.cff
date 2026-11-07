@@ -1,8 +1,8 @@
 cff-version: 1.2.0
-message: "If you use this implementation, please cite the Cartan-DEC-MiAE method paper and TEDBench."
-title: "Cartan-DEC-MiAE: Cartan moving frames and discrete exterior calculus for protein self-supervision"
+message: "If you use Scientist3, cite the ScientistTwo paper and this implementation."
+title: "Scientist3: an independent, auditable implementation of the ScientistTwo research workflow"
 version: 0.1.0
-date-released: "2026-11-06"
+date-released: "2026-11-08"
 license: MIT
 authors:
   - family-names: "Li"

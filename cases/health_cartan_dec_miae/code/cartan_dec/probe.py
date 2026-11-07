@@ -152,7 +152,6 @@ def linear_probe(
     classifier = LogisticRegression(
         max_iter=2000,
         n_jobs=-1,
-        multi_class="multinomial",
         class_weight="balanced",
     )
     classifier.fit(x_train, train_labels.numpy())

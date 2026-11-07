@@ -3,43 +3,39 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "cartan-dec-miae"
+name = "scientist3"
 version = "0.1.0"
-description = "Cartan moving frames and discrete exterior calculus for self-supervised protein structure representation"
+description = "A general-purpose, auditable autonomous research pipeline in the style of ScientistTwo"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 license = { text = "MIT" }
 authors = [{ name = "l1Ha" }]
 keywords = [
-    "protein",
-    "self-supervised-learning",
-    "discrete-exterior-calculus",
-    "cartan-moving-frames",
-    "masked-autoencoder",
+    "autonomous-research",
+    "scientific-workflow",
+    "scientisttwo",
+    "reproducibility",
+    "integrity-audit",
+    "ablation-study",
 ]
 classifiers = [
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
-    "Topic :: Scientific/Engineering :: Bio-Informatics",
 ]
-dependencies = [
-    "torch>=2.1",
-    "numpy>=1.24",
-]
+dependencies = []
 
 [project.optional-dependencies]
-probe = ["scikit-learn>=1.3"]
-data = ["datasets>=2.18", "huggingface-hub>=0.20"]
-dev = ["pytest>=7.4", "scikit-learn>=1.3"]
+toy = ["numpy>=1.24"]
+health = ["numpy>=1.24", "torch>=2.1", "scikit-learn>=1.3"]
+dev = ["numpy>=1.24", "pytest>=7.4"]
 
 [project.scripts]
-cartan-train = "cartan_dec.train:main"
-cartan-eval = "cartan_dec.evaluate:main"
+scientist3 = "scientist3.cli:main"
 
 [tool.setuptools.packages.find]
-include = ["cartan_dec*"]
+include = ["scientist3*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

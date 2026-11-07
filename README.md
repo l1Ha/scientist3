@@ -1,270 +1,110 @@
-# Cartan-DEC-MiAE
+# Scientist3
 
-Independent PyTorch implementation of **Cartan-DEC-MiAE**: self-supervised
-protein-structure representation learning with Cartan moving frames and
-discrete exterior calculus (DEC).
+An independent, domain-agnostic implementation of the **ScientistTwo** research
+workflow: contract → limitations → ideation → screened experiments → ablations →
+manuscript → simulated review and rebuttal → meta-review → **re-executable
+integrity audit**.
 
-The method is described in the ScientistTwo paper
-*[Cartan Moving Frames and Discrete Exterior Calculus for Self-Supervised
-Protein Structure Representation](https://scientist-two.github.io/#applications/Health%20(Cartan-DEC-MiAE))*.
-The data and MiAE ecosystem come from the open-source
-**[TEDBench](https://github.com/BorgwardtLab/TEDBench)** project.
+Scientist3 turns a small, declarative *case contract* into a bounded autonomous
+research loop, and it keeps one rule absolute:
 
-This repository provides a complete, runnable pipeline:
+> **Every promotion, rejection, score and number comes from stored experiment
+> observations — never from model text.**
 
-* residue frames from backbone `N, CA, C`;
-* discrete connection 1-forms, curvature 2-forms and curvature/holonomy defects;
-* a sparse, gauge-invariant Transformer encoder with curvature and connection
-  heat-transport attention biases;
-* a Cartan–Darboux decoder that predicts forms and integrates them back to 3D
-  geometry;
-* geometry-aware and contiguous-span masking;
-* mask-centric loss and a frozen-encoder MLP probe;
-* synthetic CPU demo plus adapters for the TEDBench Hugging Face datasets.
+Scripted agents are the default: the whole pipeline, including the health case,
+runs offline with no API keys. A live OpenAI-compatible mode exists for the
+creative stages only; critics and the audit cannot read model output.
 
-> **Scope.** This is an independent reimplementation, not the authors' original
-> code. The full paper trains a 38M-parameter encoder on 369,740 structures. The
-> checked-in quickstart uses small synthetic backbones so it runs on a laptop.
-> See [Fidelity notes](#fidelity-notes) for the exact deviations.
+Reference: [ScientistTwo project site](https://scientist-two.github.io/) ·
+[`l1Ha/cartan-dec-miae`](https://github.com/l1Ha/cartan-dec-miae) (the
+standalone case artifact used by the health case).
 
-## Method at a glance
+## Quickstart (under a minute, NumPy only)
 
-```mermaid
-flowchart LR
-    A["Backbone N, CA, C"] --> B["Cartan frames E_i in SO(3)"]
-    B --> C["DEC forms<br/>connection omega_ij<br/>curvature Omega_f<br/>defect D_i"]
-    C --> D["Geometry-aware masking<br/>uniform / span / curvature"]
-    D --> E["Sparse encoder<br/>only visible residues<br/>curvature + heat attention biases"]
-    E --> F["Cartan-Darboux decoder<br/>predict omega, Omega, theta, anchor geometry"]
-    F --> G["Integrate discrete<br/>Cartan structure equations"]
-    G --> H["Mask-centric loss<br/>forms + anchor position/rotation + integration"]
-    C --> H
+```powershell
+pip install -e ".[toy]"          # or: pip install -e ".[dev]" for the test suite
+python -m scientist3 list-cases
+python -m scientist3 run toy_regression --run-id toy-demo
+python -m scientist3 inspect toy-demo
+python -m scientist3 show toy-demo paper/final.md
 ```
 
-For a contact triangle `(i, j, k)`:
+Expected shape of a successful run: the wide Fourier-polynomial variant is
+selected, all four ablations degrade the primary metric, the first review is
+below threshold, two supplementary experiments lift the second review above it,
+and the integrity audit passes. Every artifact lands in `runs/toy-demo/`
+(git-ignored).
 
-```text
-omega_ij = log(E_i^T E_j)
-Omega_f  = omega_ij + omega_jk + omega_ki + 1/2 [omega_ij, omega_jk]
+## The real deployment: Cartan-DEC-MiAE
+
+```powershell
+pip install -e ".[health]"       # torch + scikit-learn (CPU is fine)
+python -m scientist3 run health_cartan_dec_miae --run-id health-demo
+python -m scientist3 show health-demo paper/final.md
+python -m scientist3 audit health-demo --reexecute
 ```
 
-and for a masked residue `m` anchored at visible residue `a(m)`:
+The health case wraps the Cartan-DEC-MiAE code (Cartan moving frames, discrete
+connection/curvature forms, geometry-aware masking, mask-centric transport
+objective) in a Scientist3 contract and runs the full loop on synthetic folds:
+baseline vanilla masked autoencoder, three seed ideas, one evolved idea, four
+component ablations, two rebuttal supplementaries.
 
-```text
-E_m = E_a exp(sum_{u=a(m)}^{m-1} omega_u)
-t_m = t_a + sum_{u=a(m)}^{m-1} E_u theta_u
-```
+**Honest scope:** this is a CPU smoke deployment. The probe endpoint saturates
+on the synthetic families, so the case's primary endpoint is masked integrated
+reconstruction error, which measures the transport mechanism directly.
+Conclusions hold for this benchmark and budget only — not for TEDBench and not
+for the paper's reported numbers.
 
-The full derivation and implementation notes are in
-[`docs/method.md`](docs/method.md).
+## How the loop is bounded
 
-## Installation
-
-Python 3.10+ and PyTorch 2.1+ are required.
-
-```bash
-git clone https://github.com/l1Ha/cartan-dec-miae.git
-cd cartan-dec-miae
-
-# CPU-only PyTorch (choose the CUDA build from pytorch.org for a GPU)
-pip install torch --index-url https://download.pytorch.org/whl/cpu
-
-# Package + probe/metrics extras
-pip install -e ".[probe]"
-
-# Optional: Hugging Face datasets for TEDBench
-pip install -e ".[data]"
-```
-
-Or install everything at once:
-
-```bash
-pip install -r requirements.txt
-pip install -e ".[probe,data,dev]"
-```
-
-## Quickstart (CPU)
-
-The quickstart trains a 1.2M-parameter model on synthetic helix/sheet/coil/
-globule backbones, then freezes the encoder and trains the paper-style
-mean+max MLP probe.
-
-```bash
-python scripts/quickstart.py
-```
-
-or with the module CLI:
-
-```bash
-python -m cartan_dec.train \
-    --dataset synthetic --samples 128 --test-samples 64 \
-    --epochs 3 --batch-size 16 \
-    --d-model 128 --depth 4 --n-heads 8 \
-    --decoder-dim 128 --decoder-depth 2 --decoder-heads 8 \
-    --min-length 60 --max-synthetic-length 90 \
-    --max-exact-heat-residues 96 \
-    --probe-epochs 30 --out runs/quickstart
-```
-
-The demo is not a scientific benchmark; it verifies that geometry, masking,
-forms, integration, pretraining and probing are all wired correctly. On the
-synthetic task above the frozen probe reaches **98.4% accuracy / 0.984 macro
-F1** on 64 held-out chains (4 classes) after ~13 seconds of CPU pretraining.
-
-## Training on TEDBench
-
-The public datasets are loaded from Hugging Face:
-
-| Dataset | Repo | Split |
+| Stage | What it produces | Bounds |
 |---|---|---|
-| TEDBench train | `TEDBench/ted` | `train` |
-| TEDBench test | `TEDBench/ted` | `test` |
-| External CATH 4.4 | `TEDBench/cath` | `test` |
+| S0 contract | hashed contract, protected evaluation files | — |
+| S1 limitations | falsifiable limitation set | verifier gates count/mechanism |
+| S2 ideation | seed ideas + novelty report | contract-declared |
+| S3 screening | subset runs with engineering rounds | `top_ideas`, `max_screening_rounds` |
+| S4 full grid | full runs, evolution, selection by primary metric | `min/max_successful_ideas`, `max_evo_rounds` |
+| S5 ablations | component attribution (`clean` at ≥75% degradations) | `ablation_min_gain`, `max_ablation_refinements` |
+| S6 drafting | manuscript built from observations | — |
+| S7 review + rebuttal | evidence-scored reviews, ≤2 supplementaries per round | `max_review_rounds` |
+| S8 meta-review | accept/revise gate | `review_threshold` |
+| S9 integrity | re-executed score check, spec compliance, references, method–code alignment | `--no-reexecute-audit` to skip re-execution |
 
-Full-scale pretraining (369,740 structures, 965 CATH-T classes):
-
-```bash
-python -m cartan_dec.train \
-    --dataset tedbench \
-    --repo-id TEDBench/ted --train-split train \
-    --test-repo-id TEDBench/ted --test-split test \
-    --epochs 5 --batch-size 32 \
-    --d-model 512 --depth 12 --n-heads 8 \
-    --decoder-dim 256 --decoder-depth 3 --decoder-heads 8 \
-    --mask-strategy span --mask-ratio 0.5 \
-    --out runs/tedbench
-```
-
-Evaluate a checkpoint on the external CATH 4.4 set:
-
-```bash
-python -m cartan_dec.evaluate \
-    --checkpoint runs/tedbench/last.pt \
-    --dataset tedbench \
-    --repo-id TEDBench/ted --train-split train \
-    --test-repo-id TEDBench/cath --test-split test \
-    --batch-size 32 --probe-epochs 100 \
-    --out runs/tedbench/cath_metrics.json
-```
-
-Useful ablations:
-
-```bash
-# vanilla contiguous span masking (strongest per the paper)
---mask-strategy span --span-length 10
-
-# uniform random masking
---mask-strategy random
-
-# curvature/holonomy-targeted masking (paper reports it does NOT beat span)
---mask-strategy geometry --hard-geometry-mask
-
-# attention-bias variants
---no-curvature-bias
---no-heat-bias
---distance-bias
-
-# loss-term leave-one-out
---lambda-curvature 0
---lambda-omega 0
---lambda-integration 0
-```
+Every stage is resumable (`scientist3 resume <run-id>`), and a completed stage is
+loaded from its sealed artifact rather than re-run.
 
 ## Repository layout
 
 ```text
-cartan_dec/
-├── geometry.py   # frames, contact graph, connection/curvature forms, heat kernel
-├── masking.py    # random, span, curvature/holonomy masking
-├── model.py      # sparse encoder, Cartan-Darboux decoder, full model
-├── losses.py     # mask-centric form + anchor + integration losses
-├── data.py       # synthetic backbones and TEDBench adapters
-├── probe.py      # frozen-encoder MLP/linear probes
-├── train.py      # pretraining CLI
-├── evaluate.py   # checkpoint evaluation CLI
-└── utils.py      # seeding, logging, checkpoints
-
-scripts/quickstart.py   # CPU end-to-end demo
-tests/                  # geometry, masking, model and integration tests
-docs/method.md          # equations and fidelity notes
+scientist3/            the Python package (core, runner, agents, paper, audit, pipeline, cli)
+cases/
+  toy_regression/      dependency-light reference case (frozen NumPy harness)
+  health_cartan_dec_miae/  Cartan-DEC-MiAE deployment (code/, tests/, docs/)
+tests/                 unit, agent and end-to-end pipeline tests
+docs/
+  architecture.md      stage graph, trust boundary, resume semantics
+  case-guide.md        the complete case.toml schema
+  fidelity.md          what is and is not faithful to ScientistTwo
+  live-models.md       running creative agents on a live endpoint
 ```
-
-## Paper results (for reference)
-
-The paper's full-corpus result (369,740 structures, matched encoder/data/steps/
-probe) is reproduced here for context. These numbers are from the paper, not
-from the synthetic quickstart in this repository.
-
-| Pretraining condition | TEDBench acc | TEDBench F1 | CATH 4.4 acc | CATH 4.4 F1 |
-|---|---:|---:|---:|---:|
-| Random-init encoder | 40.13 | 9.69 | 30.49 | 10.24 |
-| Vanilla MAE (from scratch) | 56.91 | 32.23 | 51.10 | 23.90 |
-| Cartan-DEC objective | 59.30 | 37.73 | 61.79 | 34.94 |
-| + curvature-biased attention | **60.18** | **39.30** | **64.12** | **37.93** |
-| + holonomy-curvature masking | 57.58 | 30.13 | 64.45 | 34.18 |
-| Public MiAE-B reference (our probe) | 74.20 | 57.79 | 86.09 | 66.73 |
-
-Key takeaways from the paper:
-
-* curvature 2-form supervision is the most valuable single loss term;
-* combining curvature and connection-heat attention is the strongest attention
-  variant and best resists attention collapse under aggressive masking;
-* holonomy-targeted masking does **not** beat plain contiguous span masking;
-* lower reconstruction RMSD anti-correlates with downstream transfer.
-
-## Fidelity notes
-
-* **Encoder.** The paper uses the ESM3/MiAE geometric-attention stack. This
-  implementation uses a clean invariant-feature Transformer with the same
-  sparse visible-only computation and the same curvature/heat biases. The
-  encoder is modular and can be replaced.
-* **Holonomy.** For frame-exact coordinates the group holonomy around a graph
-  loop telescopes to the identity. The paper notes this explicitly. The
-  implementation uses the non-abelian curvature norm `||Omega_i||` as the
-  defect/localiser, which is the informative part of `Omega_f`.
-* **Path integration.** Integration follows the sequence, which is always
-  connected under span masking. A contact-graph shortest path is a natural
-  extension and would use the same structure equations.
-* **Heat kernel.** Exact matrix exponential up to 192 residues; a stable
-  diffusion approximation beyond that. It only feeds an attention bias.
-* **Scale.** The synthetic quickstart is a smoke test. Full-scale results
-  require the TEDBench corpus and substantially more compute.
 
 ## Tests
 
-```bash
-pytest -q
+```powershell
+pip install -e ".[dev]"
+python -m pytest
 ```
 
-The tests cover SO(3) exp/log round-trips, orthonormal frames, connection forms,
-curvature shapes, heat-kernel shapes, exact path-integration reconstruction,
-masking budgets, model forward/backward, and the geometry-masking path.
+The suite covers the contract schema, command expansion and comparison
+semantics, the audit checks, scripted/live agent fallbacks, and an end-to-end
+toy run plus an idempotent-resume assertion.
 
-## Citation
+## Status and citation
 
-If you use this implementation, please cite the method paper and TEDBench:
+Pre-1.0 research infrastructure. If you use it, cite the ScientistTwo paper
+(see `CITATION.cff`) and note that Scientist3 is an independent implementation,
+not the authors' code. Bundled cases carry their own fidelity limits in
+`docs/fidelity.md`; quote them when you quote results.
 
-```bibtex
-@article{nam2026scientisttwo,
-  title   = {ScientistTwo: Pioneering the Human Knowledge Frontier with Autonomous AI},
-  author  = {Nam, Jaehyun and Yoon, Jinsung and Pan, Yanzhou and Wang, Yubo and
-             Meng, Rui and Ranganathan, Parthasarathy and Pfister, Tomas},
-  journal = {arXiv preprint arXiv:2609.19644},
-  year    = {2026}
-}
-
-@inproceedings{chen2026tedbench,
-  title     = {Protein Fold Classification at Scale: Benchmarking and Pretraining},
-  author    = {Chen, Dexiong and Manolache, Andrei and Niepert, Mathias and Borgwardt, Karsten},
-  booktitle = {Proceedings of the 43rd International Conference on Machine Learning (ICML)},
-  year      = {2026}
-}
-```
-
-## Acknowledgements
-
-* The method and paper are by the ScientistTwo authors (Google Cloud AI
-  Research).
-* Data, MiAE baselines and evaluation protocol come from
-  [BorgwardtLab/TEDBench](https://github.com/BorgwardtLab/TEDBench) (BSD-3-Clause).
-* This independent implementation is released under the MIT License.
+MIT licensed.

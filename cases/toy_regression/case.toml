@@ -1,0 +1,177 @@
+protected_paths = ["harness/run.py", "problem.md"]
+
+[case]
+id = "toy_regression"
+title = "Structured regression with random Fourier features"
+domain = "general / tabular regression"
+problem = "problem.md"
+code_dir = ""
+metrics_file = "metrics.json"
+keywords = ["regression", "random features", "ablation", "reproducibility"]
+notes = """
+This is the CPU-fast, dependency-light reference case for Scientist3. It is a
+workflow demonstration on a synthetic regression target, not a scientific
+claim about random features. The harness, splits and metric implementation are
+the protected evaluation protocol.
+"""
+
+[baseline]
+name = "linear ridge"
+command = "{python} harness/run.py --method linear --alpha 0.01 --n {samples} --seed {seed} --out {out}"
+
+[[metrics]]
+name = "rmse"
+direction = "min"
+primary = true
+path = "rmse"
+min_gain = 0.10
+
+[[metrics]]
+name = "r2"
+direction = "max"
+path = "r2"
+
+[budget]
+seeds = [0, 1]
+subset_samples = 300
+full_samples = 1200
+test_samples = 240
+subset_epochs = 1
+full_epochs = 1
+top_ideas = 4
+max_screening_rounds = 2
+max_evo_rounds = 1
+min_successful_ideas = 5
+max_successful_ideas = 5
+max_ablation_refinements = 0
+max_review_rounds = 2
+review_threshold = 9.0
+max_meta_refinements = 1
+timeout_seconds = 300
+min_relative_gain = 0.10
+ablation_min_gain = 0.10
+
+[variables]
+external_validity = false
+references = [
+  { title = "Random Features for Large-Scale Kernel Machines (Rahimi & Recht, NeurIPS 2007)", url = "https://papers.nips.cc/paper_files/paper/2007/hash/013a006f03dbc5392effeb8f18fda755-Abstract.html" },
+  { title = "Computing with Infinite Networks (Williams, NeurIPS 1998)", url = "https://papers.nips.cc/paper_files/paper/1998/hash/758a06618c69880a6cee5314ee42d52f-Abstract.html" },
+  { title = "Learning with Kernels (Scholkopf & Smola, MIT Press 2002)", url = "https://mitpress.mit.edu/9780262194754/learning-with-kernels/" },
+]
+
+[[limitations]]
+id = "L1"
+text = "A linear ridge model can only represent additive linear effects, so it fails on a target containing a periodic term, a quadratic term and an interaction; the failure is observable as high RMSE and near-zero R2 on held-out data."
+mechanism = true
+test = "Fit linear ridge and compare held-out RMSE against polynomial and random-feature baselines at the same seed."
+
+[[limitations]]
+id = "L2"
+text = "Polynomial features of low degree approximate the quadratic and interaction terms but cannot represent the periodic component, so the residual error stays dominated by the sine term."
+mechanism = true
+test = "Compare degree-2 polynomial regression against random Fourier features on the same split."
+
+[[limitations]]
+id = "L3"
+text = "Random Fourier features are controlled by the kernel bandwidth; a mis-scaled bandwidth makes the feature map nearly constant and collapses accuracy, while a matched bandwidth represents the periodic component well."
+mechanism = true
+test = "Sweep the bandwidth and record held-out RMSE for the random-feature model."
+
+[[limitations]]
+id = "L4"
+text = "Ridge regularization interacts with the feature count: too little regularization overfits the 256- or 512-dimensional random feature map, and too much regularization suppresses the periodic signal."
+mechanism = false
+test = "Compare alpha values on the selected random-feature model."
+
+[[ideas]]
+id = "I1"
+name = "quadratic polynomial basis"
+novelty = "low"
+targets = ["L2"]
+mechanism = "Append all degree-2 monomials to the linear design matrix, letting ridge represent the quadratic and interaction terms."
+delta = "Classical polynomial regression; the new element is only the declared comparison against random features."
+risk = "Cannot represent the periodic component, so it should improve but not solve the task."
+command = "{python} harness/run.py --method poly --degree 2 --alpha 0.01 --n {samples} --seed {seed} --out {out}"
+
+[[ideas]]
+id = "I2"
+name = "random Fourier features"
+novelty = "medium"
+targets = ["L1", "L2"]
+mechanism = "Map the three inputs through 256 random cosine features with a unit bandwidth, then fit ridge regression; this is a finite-sample approximation to an RBF kernel."
+delta = "Replaces the fixed polynomial basis with a data-adaptive periodic basis."
+risk = "Feature variance depends on bandwidth and regularization, so the default scales may not transfer."
+command = "{python} harness/run.py --method rff --features 256 --bandwidth 1.0 --phase random --alpha 0.01 --n {samples} --seed {seed} --out {out}"
+
+[[ideas]]
+id = "I3"
+name = "hybrid Fourier-polynomial basis"
+novelty = "medium"
+targets = ["L1", "L2", "L3"]
+mechanism = "Concatenate random Fourier features with degree-2 polynomial features so that both the periodic and the smooth quadratic components have dedicated basis functions."
+delta = "Combines two mechanisms in one linear model; tests whether the union is better than either part alone."
+risk = "Doubles the effective feature count and can overfit the smaller subset split."
+command = "{python} harness/run.py --method rff_poly --features 256 --degree 2 --bandwidth 1.0 --alpha 0.01 --n {samples} --seed {seed} --out {out}"
+
+[[ideas]]
+id = "I4"
+name = "adaptive-bandwidth Fourier features"
+novelty = "medium"
+targets = ["L3"]
+mechanism = "Start from a deliberately narrow kernel bandwidth, detect the collapse from the subset RMSE, and re-engineer the kernel scale before full evaluation."
+delta = "Treats the bandwidth as an explicitly diagnosed engineering variable rather than a fixed default."
+risk = "If the subset signal is noisy, the engineering round can select a bandwidth that does not transfer."
+command = "{python} harness/run.py --method rff --features 256 --bandwidth 0.05 --phase random --alpha 0.01 --n {samples} --seed {seed} --out {out}"
+engineering_commands = [
+  "{python} harness/run.py --method rff --features 256 --bandwidth 1.0 --phase random --alpha 0.01 --n {samples} --seed {seed} --out {out}",
+]
+
+[[evolved_ideas]]
+id = "I5"
+name = "wide cubic Fourier-polynomial basis"
+novelty = "medium"
+targets = ["L2", "L3", "L4"]
+mechanism = "Use 512 Fourier features together with degree-3 monomials, which adds the cubic interaction that the derivative of the sine term induces."
+delta = "Evolved from the hybrid idea after observing that the residual curve retains cubic structure."
+risk = "Higher capacity raises variance on the full grid; ridge regularization must absorb it."
+command = "{python} harness/run.py --method rff_poly --features 512 --degree 3 --bandwidth 1.0 --alpha 0.01 --n {samples} --seed {seed} --out {out}"
+
+[[ablations]]
+id = "A1"
+component = "random Fourier features"
+description = "Replace the selected Fourier-polynomial map with raw linear inputs, keeping the ridge fit."
+command = "{python} harness/run.py --method rff_poly --features 512 --degree 3 --bandwidth 1.0 --alpha 0.01 --ablate rff --n {samples} --seed {seed} --out {out}"
+direction = "drop"
+
+[[ablations]]
+id = "A2"
+component = "random phase offsets"
+description = "Remove the random phase offsets, leaving a purely even cosine basis."
+command = "{python} harness/run.py --method rff_poly --features 512 --degree 3 --bandwidth 1.0 --alpha 0.01 --ablate phase --n {samples} --seed {seed} --out {out}"
+direction = "drop"
+
+[[ablations]]
+id = "A3"
+component = "kernel bandwidth"
+description = "Collapse the kernel bandwidth to 0.05, making the random features nearly constant."
+command = "{python} harness/run.py --method rff_poly --features 512 --degree 3 --bandwidth 1.0 --alpha 0.01 --ablate bandwidth --n {samples} --seed {seed} --out {out}"
+direction = "drop"
+
+[[ablations]]
+id = "A4"
+component = "ridge regularization"
+description = "Over-regularize the ridge fit to alpha=100, suppressing the learned periodic signal."
+command = "{python} harness/run.py --method rff_poly --features 512 --degree 3 --bandwidth 1.0 --alpha 0.01 --ablate reg --n {samples} --seed {seed} --out {out}"
+direction = "drop"
+
+[[supplementary]]
+id = "R1"
+question = "Does the selected model transfer when the test inputs are shifted outside the training range?"
+description = "Evaluate the selected Fourier-polynomial model on a test split shifted by +0.75 in the first input."
+command = "{python} harness/run.py --method rff_poly --features 512 --degree 3 --bandwidth 1.0 --alpha 0.01 --n {samples} --seed {seed} --shift 0.75 --out {out}"
+
+[[supplementary]]
+id = "R2"
+question = "How sensitive is the selected model to additional observation noise?"
+description = "Evaluate the selected model with observation noise raised from 0.05 to 0.25."
+command = "{python} harness/run.py --method rff_poly --features 512 --degree 3 --bandwidth 1.0 --alpha 0.01 --n {samples} --seed {seed} --noise 0.25 --out {out}"
