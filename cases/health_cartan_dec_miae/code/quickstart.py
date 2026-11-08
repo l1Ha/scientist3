@@ -4,9 +4,9 @@
 This is deliberately CPU friendly: a 1-2M parameter model, short chains, and a
 handful of epochs.  It verifies the full pretraining + frozen-probe pipeline.
 
-Usage:
-    python scripts/quickstart.py
-    python scripts/quickstart.py --out runs/my_demo --epochs 5
+Usage (run from this directory):
+    python quickstart.py
+    python quickstart.py --out runs/my_demo --epochs 5
 """
 
 from __future__ import annotations
@@ -54,6 +54,8 @@ def main() -> None:
     print("\nQuickstart complete.")
     if "probe" in results:
         print(f"Frozen-probe test metrics: {results['probe']}")
+    if "reconstruction" in results:
+        print(f"Masked-geometry reconstruction: {results['reconstruction']}")
 
 
 if __name__ == "__main__":
