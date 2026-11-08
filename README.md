@@ -1,5 +1,7 @@
 # Scientist3
 
+[![CI](https://github.com/l1Ha/scientist3/actions/workflows/ci.yml/badge.svg)](https://github.com/l1Ha/scientist3/actions/workflows/ci.yml)
+
 An independent, domain-agnostic implementation of the **ScientistTwo** research
 workflow: contract → limitations → ideation → screened experiments → ablations →
 manuscript → simulated review and rebuttal → meta-review → **re-executable
@@ -97,8 +99,11 @@ python -m pytest
 ```
 
 The suite covers the contract schema, command expansion and comparison
-semantics, the audit checks, scripted/live agent fallbacks, and an end-to-end
-toy run plus an idempotent-resume assertion.
+semantics, the audit checks, scripted/live agent fallbacks, paper assembly, and
+an end-to-end toy run plus an idempotent-resume assertion. CI also runs the
+toy pipeline with outcome assertions and the Cartan-DEC unit tests on every
+push; the full health pipeline runs weekly (and on manual dispatch) because it
+re-executes the winning training command as part of the audit.
 
 ## Status and citation
 
