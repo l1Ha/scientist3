@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import math
 import os
+import re
 import statistics
 import subprocess
 import sys
@@ -106,6 +107,16 @@ def expand_command(template: str, variables: dict[str, Any]) -> list[str]:
 # ---------------------------------------------------------------------------
 
 
+_UNSAFE_PATH_CHARS = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
+
+
+def _safe_path_name(name: str) -> str:
+    """Windows-safe directory component; case names may contain any text."""
+
+    cleaned = _UNSAFE_PATH_CHARS.sub("_", name).strip().rstrip(".")
+    return cleaned or "variant"
+
+
 @dataclass
 class RunContext:
     """Everything needed to execute one declared experiment."""
@@ -158,10 +169,11 @@ class ExperimentRunner:
     # -- execution -------------------------------------------------------
 
     def run(self, context: RunContext) -> ExperimentResult:
-        out_dir = self.run_dir / "experiments" / context.stage / context.variant / f"seed{context.seed}"
+        variant_dir = _safe_path_name(context.variant)
+        out_dir = self.run_dir / "experiments" / context.stage / variant_dir / f"seed{context.seed}"
         # Split-aware directories keep subset and full observations apart.
         if context.split in {"subset", "full"}:
-            out_dir = self.run_dir / "experiments" / context.stage / context.variant / context.split / f"seed{context.seed}"
+            out_dir = self.run_dir / "experiments" / context.stage / variant_dir / context.split / f"seed{context.seed}"
         out_dir.mkdir(parents=True, exist_ok=True)
         log_path = out_dir / "run.log"
 
