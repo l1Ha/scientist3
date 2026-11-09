@@ -98,7 +98,7 @@ def test_compare_requires_seed_consistency() -> None:
 
 def test_safe_path_name_sanitizes_windows_chars() -> None:
     assert _safe_path_name("naive l<=12 (a/b)") == "naive l_=12 (a_b)"
-    assert _safe_path_name('weird:"name?"') == "weird__name_"
+    assert _safe_path_name('weird:"name?"') == "weird__name__"
     assert _safe_path_name("...") == "variant"
     assert _safe_path_name("plain name 2") == "plain name 2"
 
