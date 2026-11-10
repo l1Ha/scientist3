@@ -96,6 +96,11 @@ def test_format_value_and_table_header() -> None:
     assert one == "0.5000"
     assert two == "0.6000 ± 0.1000"
     assert format_value(case, [], "rmse") == "n/a"
+    # near-zero values must not be rendered as 0.0000
+    tiny = format_value(case, [_result(0, 3.03e-6)], "rmse")
+    assert tiny == "3.03e-06"
+    tiny_pair = format_value(case, [_result(0, 3.0e-6), _result(1, 3.0e-6)], "rmse")
+    assert tiny_pair == "3.00e-06 ± 0.0000"
 
     table = results_table(case, [("x", [_result(0, 0.5)])])
     assert "`rmse`" in table and "`r2`" in table

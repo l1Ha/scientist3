@@ -40,14 +40,22 @@ def _problem_summary(case: CaseSpec, limit: int = 240) -> str:
     return summary
 
 
+def _format_number(value: float) -> str:
+    """Fixed 4 decimals for normal values, scientific for near-zero ones."""
+
+    if value != 0.0 and abs(value) < 1e-3:
+        return f"{value:.2e}"
+    return f"{value:.4f}"
+
+
 def format_value(case: CaseSpec, result: list[ExperimentResult], metric_name: str) -> str:
     spec = next(m for m in case.metrics if m.name == metric_name)
     stats = aggregate(result, spec)
     if stats["n"] == 0:
         return "n/a"
     if stats["n"] == 1:
-        return f"{stats['mean']:.4f}"
-    return f"{stats['mean']:.4f} ± {stats['std']:.4f}"
+        return _format_number(stats["mean"])
+    return f"{_format_number(stats['mean'])} ± {_format_number(stats['std'])}"
 
 
 def results_table(case: CaseSpec, groups: list[tuple[str, list[ExperimentResult]]]) -> str:
